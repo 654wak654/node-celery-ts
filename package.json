@@ -1,6 +1,6 @@
 {
-    "name": "celery-ts",
-    "version": "1.1.1",
+    "name": "@654wak654/celery-ts",
+    "version": "1.1.2",
     "description": "TypeScript Celery client for Node",
     "keywords": [
         "amqp",
