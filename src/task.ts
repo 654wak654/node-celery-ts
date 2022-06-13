@@ -161,12 +161,10 @@ export class Task<T> {
             "content-encoding": ContentEncodingMime.Utf8,
             "content-type": Task.getContentTypeMime(serializer),
             headers: this.createHeaders({
-                args,
                 compression,
                 eta: etaStr,
                 expires: expiresStr,
                 id,
-                kwargs,
             }),
             properties: this.createProperties({
                 deliveryMode: this.getDeliveryMode(),
@@ -327,7 +325,7 @@ export class Task<T> {
      * @param id The UUID of this task.
      * @returns The headers of a task message to be queued.
      */
-    private createHeaders({ args, compression, eta, expires, kwargs, id }: {
+    private createHeaders({ compression, eta, expires, id }: {
         args: Args;
         compression: Packer.Compressor;
         eta: string | null;
@@ -336,12 +334,12 @@ export class Task<T> {
         kwargs: KeywordArgs;
     }): TaskHeaders {
         const base: TaskHeaders = {
-            argsrepr: JSON.stringify(args),
+            argsrepr: "{}",
             eta,
             expires,
             group: null,
             id,
-            kwargsrepr: JSON.stringify(kwargs),
+            kwargsrepr: "{}",
             lang: "py",
             origin: Task.getOrigin(),
             parent_id: null,
