@@ -120,14 +120,18 @@ export class RedisBackend implements ResultBackend {
      * @param taskId The UUID of the task whose result is to be fetched.
      * @param timeout The time to wait before rejecting the Promise. If
      *                undefined, no timeout will be set.
+     * @param compression Weather to decompress result or not.
      * @returns A Promise that resolves to the result received from Redis.
      */
     public async get<T>({
         taskId,
-        timeout
+        timeout,
+        compression
     }: GetOptions): Promise<ResultMessage<T>> {
         const listen = async (): Promise<ResultMessage<T>> => {
             const raw = await this.results.get(taskId);
+
+            console.log(compression);
 
             return JSON.parse(raw);
         };

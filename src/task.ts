@@ -148,7 +148,12 @@ export class Task<T> {
         })();
 
         const id = Uuid.v4();
-        const result = new Result<T>(id, backend);
+        const doCompression = compression !== Packer.Compressor.Identity;
+        const result = new Result<T>(id, backend, doCompression);
+
+        if (doCompression) {
+            args[0]._compress_response = true;
+        }
 
         const [packer, encoding] = Task.createPacker(serializer, compression);
         const body = Task.packBody({ args, kwargs, packer });

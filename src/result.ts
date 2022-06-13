@@ -38,6 +38,7 @@ import { createTimeoutPromise } from "./utility";
 export class Result<T> {
     private readonly backend: ResultBackend;
     private readonly taskId: string;
+    private readonly compression: boolean;
     private readonly result: Promise<T>;
 
     /**
@@ -45,11 +46,13 @@ export class Result<T> {
      *
      * @param taskId UUID of the task whose result we are requesting.
      * @param backend The backend to receive the result on.
+     * @param compression Weather to decompress result or not.
      * @returns A `Result` that will fetch from `backend` when possible.
      */
-    public constructor(taskId: string, backend: ResultBackend) {
+    public constructor(taskId: string, backend: ResultBackend, compression: boolean) {
         this.taskId = taskId;
         this.backend = backend;
+        this.compression = compression;
         this.result = this.getResult();
     }
 
@@ -82,7 +85,7 @@ export class Result<T> {
      *          result backend.
      */
     private async getResult(): Promise<T> {
-        const message = await this.backend.get<T>({ taskId: this.taskId });
+        const message = await this.backend.get<T>({ taskId: this.taskId, compression: this.compression });
 
         return message.result;
     }

@@ -48,7 +48,7 @@ export interface ResultBackend {
      *                undefined, no timeout will be set.
      * @returns A Promise that resolves to the result fetched from the backend.
      */
-    get<T>({ taskId, timeout }: GetOptions): Promise<ResultMessage<T>>;
+    get<T>({ taskId, timeout, compression }: GetOptions): Promise<ResultMessage<T>>;
 
     /**
      * @param taskId The UUID of the task whose result is to be deleted from
@@ -87,4 +87,6 @@ export interface GetOptions {
     taskId: string;
     /** In milliseconds. */
     timeout?: number;
+    /** Weather to decompress result or not. */
+    compression?: boolean;
 }

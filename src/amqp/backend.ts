@@ -40,6 +40,8 @@ import {
     promisifyEvent,
 } from "../utility";
 
+import { unzip } from "zlib";
+
 import * as AmqpLib from "amqplib";
 
 /**
@@ -115,14 +117,17 @@ export class RpcBackend implements ResultBackend {
      * @param taskId The UUID of the task whose result is to be fetched.
      * @param timeout The time to wait, im milliseconds, before rejecting
      *                the promise. If `undefined`, will wait forever.
+     * @param compression Weather to decompress result or not.
+     *
      * @returns The result as fetched from RabbitMQ.
      */
     public async get<T>({
         taskId,
-        timeout
+        timeout,
+        compression
     }: GetOptions): Promise<ResultMessage<T>> {
         const raw = await this.promises.get(taskId);
-        const result = RpcBackend.parseMessage<T>(raw);
+        const result = RpcBackend.parseMessage<T>(raw, compression);
 
         return createTimeoutPromise(result, timeout);
     }
@@ -186,14 +191,30 @@ export class RpcBackend implements ResultBackend {
      * representation.
      *
      * @param message The raw message to parse.
+     * @param compression Weather to decompress result or not.
      * @returns An object representation of `message`'s contents.
      *
      * @throws Error If the message does not contain valid UTF-8.
      * @throws SyntaxError If the message does not contain a valid
      *                     JSON-serialized object.
      */
-    private static parseMessage<T>(message: Message): ResultMessage<T> {
+    private static async parseMessage<T>(message: Message, compression: boolean = false): Promise<ResultMessage<T>> {
         const content = message.content.toString("utf8");
+
+        if (compression) {
+            const buffer = Buffer.from(content, "base64");
+
+            return new Promise((resolve, reject) => {
+                unzip(buffer, (error, result) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(JSON.parse(result.toString("utf8")));
+                    }
+                });
+            });
+        }
+
         const parsed: ResultMessage<T> = JSON.parse(content);
 
         return parsed;
