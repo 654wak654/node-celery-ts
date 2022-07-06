@@ -48,10 +48,10 @@ import * as AmqpLib from "amqplib";
  * RabbitMQ result backend using RPC and one queue per client.
  */
 export class RpcBackend implements ResultBackend {
-    private channels!: ResourcePool<AmqpLib.Channel>;
-    private connection!: Promise<AmqpLib.Connection>;
-    private consumer!: Promise<AmqpLib.Channel>;
-    private consumerTag!: Promise<string>;
+    private readonly channels: ResourcePool<AmqpLib.Channel>;
+    private readonly connection: Promise<AmqpLib.Connection>;
+    private readonly consumer: Promise<AmqpLib.Channel>;
+    private readonly consumerTag: Promise<string>;
     private readonly options: AmqpOptions;
     private promises: PromiseMap<string, Message>;
     private readonly routingKey: string;
@@ -78,21 +78,8 @@ export class RpcBackend implements ResultBackend {
         this.promises = new PromiseMap<string, Message>(DEFAULT_TIMEOUT);
         this.routingKey = routingKey;
 
-        this.establishConnection();
-    }
-
-    private establishConnection() {
         this.connection = Promise.resolve(AmqpLib.connect(this.options));
 
-        this.connection.then((conn) => conn.on("error", (err) => {
-            this.promises.rejectAll(err);
-            this.establishConnection();
-        }));
-
-        this.establishConsumer();
-    }
-
-    private establishConsumer() {
         this.channels = new ResourcePool<AmqpLib.Channel>(
             () => this.connection.then((connection) =>
                 connection.createChannel()
@@ -102,11 +89,6 @@ export class RpcBackend implements ResultBackend {
         );
 
         this.consumer = this.channels.get();
-
-        this.consumer.then((ch) => ch.on("error", (err) => {
-            this.promises.rejectAll(err);
-            this.establishConsumer();
-        }));
 
         this.consumerTag = this.consumer.then((consumer) =>
             this.assertQueue(consumer)
