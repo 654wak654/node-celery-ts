@@ -29,6 +29,8 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+import { setTimeout } from "timers";
+
 import { AmqpOptions, DEFAULT_AMQP_OPTIONS } from "./options";
 
 import { ResourcePool } from "../containers";
@@ -43,8 +45,8 @@ import * as AmqpLib from "amqplib";
  * Messages are, by default, durable, and will survive a broker restart.
  */
 export class AmqpBroker implements MessageBroker {
-    private channels: ResourcePool<AmqpLib.Channel>;
-    private readonly connection: Promise<AmqpLib.Connection>;
+    private channels!: ResourcePool<any>;
+    private connection!: Promise<any>;
     private readonly options: AmqpOptions;
 
     /**
@@ -63,21 +65,25 @@ export class AmqpBroker implements MessageBroker {
             return options;
         })();
 
-        this.connection = Promise.resolve(AmqpLib.connect(this.options));
+        this.establishConnection();
+    }
 
-        this.channels = new ResourcePool(
-            async () => {
-                const connection = await this.connection;
+    private establishConnection() {
+        this.connection = AmqpLib.connect(this.options);
 
-                return connection.createChannel();
-            },
-            async (channel) => {
-                await channel.close();
-
-                return "closed";
-            },
+        this.channels = new ResourcePool<any>(
+            () => this.connection.then((connection) => connection.createChannel()),
+            (channel) => Promise.resolve(channel.close()).then(() => "closed"),
             2,
+            false,
         );
+
+        this.connection
+            .then((connection) => {
+                connection.on("error", () => setTimeout(() => this.establishConnection(), 5000));
+                this.channels.makeReady();
+            })
+            .catch(() => setTimeout(() => this.establishConnection(), 5000));
     }
 
     /**
@@ -118,6 +124,8 @@ export class AmqpBroker implements MessageBroker {
         const body = AmqpBroker.getBody(message);
         const options = AmqpBroker.getPublishOptions(message);
 
+        await this.channels.isReady();
+
         return this.channels.use(async (channel) => {
             await AmqpBroker.assert({ channel, exchange, routingKey });
 
@@ -144,7 +152,7 @@ export class AmqpBroker implements MessageBroker {
      */
     private static getPublishOptions(
         message: TaskMessage
-    ): AmqpLib.Options.Publish {
+    ): any {
         return {
             contentEncoding: message["content-encoding"],
             contentType: message["content-type"],
@@ -165,7 +173,7 @@ export class AmqpBroker implements MessageBroker {
      * @returns A `Promise` that resolves when the assertions are complete.
      */
     private static async assert({ channel, exchange, routingKey }: {
-        channel: AmqpLib.Channel;
+        channel: any;
         exchange: string;
         routingKey: string;
     }): Promise<void> {
@@ -203,9 +211,9 @@ export class AmqpBroker implements MessageBroker {
         routingKey
     }: {
         body: Buffer;
-        channel: AmqpLib.Channel;
+        channel: any;
         exchange: string;
-        options: AmqpLib.Options.Publish;
+        options: any;
         routingKey: string;
     }): Promise<string> {
         const publish = () => channel.publish(

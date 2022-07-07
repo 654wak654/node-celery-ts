@@ -50,6 +50,8 @@ export class ResourcePool<T> {
     private unused: List<T>;
     private resourceCount: number = 0;
     private waiting: PromiseQueue<T>;
+    private readyPromise: Promise<void>;
+    public makeReady!: (value: void | PromiseLike<void>) => void;
 
     /**
      * @param create Function to be called when a new resource must be created.
@@ -60,6 +62,7 @@ export class ResourcePool<T> {
         create: () => T | PromiseLike<T>,
         destroy: (resource: T) => string | PromiseLike<string>,
         maxResources: number,
+        ready: boolean = true,
     ) {
         this.create = create;
         this.destroy = destroy;
@@ -70,6 +73,18 @@ export class ResourcePool<T> {
         this.inUse = new Set<T>();
         this.unused = new List<T>();
         this.waiting = new PromiseQueue<T>();
+
+        this.readyPromise = new Promise((resolve, _) => {
+            this.makeReady = resolve;
+        });
+
+        if (ready) {
+            this.makeReady();
+        }
+    }
+
+    public async isReady() {
+        return this.readyPromise;
     }
 
     /**

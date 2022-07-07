@@ -28,6 +28,8 @@
 // CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 
+import { setTimeout } from "timers";
+
 import { AmqpOptions, DEFAULT_AMQP_OPTIONS } from "./options";
 
 import { PromiseMap, ResourcePool } from "../containers";
@@ -48,10 +50,10 @@ import * as AmqpLib from "amqplib";
  * RabbitMQ result backend using RPC and one queue per client.
  */
 export class RpcBackend implements ResultBackend {
-    private readonly channels: ResourcePool<AmqpLib.Channel>;
-    private readonly connection: Promise<AmqpLib.Connection>;
-    private readonly consumer: Promise<AmqpLib.Channel>;
-    private readonly consumerTag: Promise<string>;
+    private channels!: ResourcePool<any>;
+    private connection!: Promise<any>;
+    private consumer!: Promise<any>;
+    private consumerTag!: Promise<string>;
     private readonly options: AmqpOptions;
     private promises: PromiseMap<string, Message>;
     private readonly routingKey: string;
@@ -78,22 +80,49 @@ export class RpcBackend implements ResultBackend {
         this.promises = new PromiseMap<string, Message>(DEFAULT_TIMEOUT);
         this.routingKey = routingKey;
 
-        this.connection = Promise.resolve(AmqpLib.connect(this.options));
+        this.establishConnection();
+    }
 
-        this.channels = new ResourcePool<AmqpLib.Channel>(
-            () => this.connection.then((connection) =>
-                connection.createChannel()
-            ),
+    private establishConnection() {
+        this.connection = AmqpLib.connect(this.options);
+
+        this.connection
+            .then((connection) => {
+                connection.on("error", (err: any) => {
+                    this.promises.rejectAll(err);
+                    setTimeout(() => this.establishConnection(), 5000);
+                });
+
+                this.establishConsumer(connection);
+            })
+            .catch((err) => {
+                this.promises.rejectAll(err);
+                setTimeout(() => this.establishConnection(), 5000);
+            });
+    }
+
+    private establishConsumer(connection: any) {
+        this.channels = new ResourcePool<any>(
+            () => connection.createChannel(),
             (channel) => Promise.resolve(channel.close()).then(() => "closed"),
             2,
         );
 
         this.consumer = this.channels.get();
 
-        this.consumerTag = this.consumer.then((consumer) =>
-            this.assertQueue(consumer)
-                .then(() => this.createConsumer(consumer))
-        );
+        this.consumer
+            .then((ch) => {
+                ch.on("error", (err: any) => {
+                    this.promises.rejectAll(err);
+                    setTimeout(() => this.establishConsumer(connection), 5000);
+                });
+
+                this.consumerTag = this.assertQueue(ch).then(() => this.createConsumer(ch));
+            })
+            .catch((err) => {
+                this.promises.rejectAll(err);
+                setTimeout(() => this.establishConsumer(connection), 5000);
+            });
     }
 
     /**
@@ -230,7 +259,7 @@ export class RpcBackend implements ResultBackend {
      */
     private static createPublishOptions<T>(
         message: ResultMessage<T>
-    ): AmqpLib.Options.Publish {
+    ): any {
         return {
             contentEncoding: "utf-8",
             contentType: "application/json",
@@ -247,8 +276,8 @@ export class RpcBackend implements ResultBackend {
      * @returns The reply from RabbitMQ.
      */
     private async assertQueue(
-        channel: AmqpLib.Channel
-    ): Promise<AmqpLib.Replies.AssertQueue> {
+        channel: any
+    ): Promise<any> {
         return channel.assertQueue(this.routingKey, {
             autoDelete: false,
             durable: false,
@@ -265,8 +294,8 @@ export class RpcBackend implements ResultBackend {
      * @param toSend The payload to write.
      */
     private async sendToQueue({ channel, options, toSend }: {
-        channel: AmqpLib.Channel;
-        options: AmqpLib.Options.Publish;
+        channel: any;
+        options: any;
         toSend: Buffer;
     }): Promise<string> {
         const send = () => channel.sendToQueue(
@@ -288,10 +317,10 @@ export class RpcBackend implements ResultBackend {
      * @param consumer The `Channel` to use.
      * @returns A `Promise` that resolves to the consumer tag of the `Channel`.
      */
-    private async createConsumer(consumer: AmqpLib.Channel): Promise<string> {
+    private async createConsumer(consumer: any): Promise<string> {
         const reply = await consumer.consume(
             this.routingKey,
-            (message) => this.onMessage(message),
+            (message?: Message | null) => this.onMessage(message),
             { noAck: true },
         );
 
